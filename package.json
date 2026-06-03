@@ -1,0 +1,30 @@
+{
+  "name": "tony-stark-discord-bot",
+  "version": "1.0.0",
+  "description": "Tony Stark — a production-ready Discord AI bot that forwards mentions to an n8n AI Agent webhook and replies with the AI response. Supports English, Khasi, and Hinglish.",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "discord",
+    "discord.js",
+    "bot",
+    "ai",
+    "n8n",
+    "webhook",
+    "tony-stark"
+  ],
+  "author": "banshanborwellkshiar",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  }
+}
