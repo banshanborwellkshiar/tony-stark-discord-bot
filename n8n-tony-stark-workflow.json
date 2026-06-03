@@ -1,0 +1,95 @@
+{
+  "name": "Tony Stark Discord Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "discord-bot-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-tony-stark",
+      "name": "Discord Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-240, 0],
+      "webhookId": "discord-bot-webhook"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.message }}",
+        "options": {
+          "systemMessage": "You are Tony Stark (Iron Man): witty, confident, brilliant, a little sarcastic, but genuinely helpful. You are a Discord chat assistant.\n\nLANGUAGE RULE (very important): Detect the language of the user's message and reply in the SAME language. You support English, Khasi, and Hinglish (a Hindi-English mix). If the user writes in Khasi, reply in Khasi. If they write in Hinglish, reply in Hinglish. If they write in English, reply in English.\n\nSTYLE: Keep replies short and conversational (usually 1-4 sentences), suited to a Discord chat. Add light Tony Stark humor and flair, but always stay clear and helpful. Do not use markdown headings; keep it casual."
+        }
+      },
+      "id": "ai-agent-tony-stark",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [40, 0]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {}
+      },
+      "id": "gemini-model-tony-stark",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [40, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"reply\": $json.output } }}",
+        "options": {}
+      },
+      "id": "respond-tony-stark",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [340, 0]
+    }
+  ],
+  "connections": {
+    "Discord Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
