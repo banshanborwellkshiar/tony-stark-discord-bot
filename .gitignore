@@ -17,6 +17,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Runtime data (created by the bot at runtime)
+tournaments.json
+
 # Runtime / cache
 .npm
 .cache/

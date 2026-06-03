@@ -24,6 +24,7 @@ const {
   Events,
 } = require('discord.js');
 const axios = require('axios');
+const { handleTournamentCommand, isTournamentCommand } = require('./tournament');
 
 // ---------------------------------------------------------------------------
 // Configuration & environment validation
@@ -275,8 +276,9 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions,
   ],
-  partials: [Partials.Channel],
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction],
 });
 
 client.once(Events.ClientReady, (c) => {
@@ -305,6 +307,17 @@ client.on(Events.MessageCreate, async (message) => {
         "👋 Hi, I'm Tony Stark. Mention me with a message and I'll respond — " +
           'English, Khasi, or Hinglish all work.'
       );
+      return;
+    }
+
+    // 3b. Tournament commands are handled in code (not by the AI) so that
+    // player lists and brackets are always exact and reliable.
+    if (isTournamentCommand(userText)) {
+      if (!message.guild) {
+        await message.reply('🏆 Tournaments only work inside a server channel.');
+        return;
+      }
+      await handleTournamentCommand(message, userText);
       return;
     }
 

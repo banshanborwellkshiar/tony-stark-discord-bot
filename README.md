@@ -32,10 +32,11 @@ Bot:   Hey! Tony Stark here — how can I help you today? 🦾
 ```
 TONY STARK/
 ├── index.js          # Main bot logic (Discord client, n8n integration, retries)
+├── tournament.js     # Tournament system (create / join via ✅ / auto-bracket)
 ├── package.json      # Dependencies and scripts
 ├── .env              # Your real secrets (git-ignored — never commit)
 ├── .env.example      # Template for environment variables
-├── .gitignore        # Keeps node_modules and .env out of git
+├── .gitignore        # Keeps node_modules, .env, and tournaments.json out of git
 └── README.md         # This file
 ```
 
@@ -221,6 +222,24 @@ In your Railway project → **Variables**, add:
 4. Check the console / `railway logs` for structured log output.
 
 ---
+
+## 🏆 Tournaments
+
+Tony can run tournaments. This is handled in code (not the AI) so player lists and
+brackets are always exact. Players join by reacting ✅; **only admins/mods** (Administrator
+or Manage Server permission) can create, start, or cancel.
+
+| Command | Who | What it does |
+| --- | --- | --- |
+| `@TonyStark tournament create <name>` | Admin | Posts an announcement with a ✅ to join |
+| `@TonyStark tournament list` | Anyone | Lists all tournaments |
+| `@TonyStark tournament players <name>` | Anyone | Shows who has joined |
+| `@TonyStark tournament start <name>` | Admin | Locks entries, posts a random round-1 bracket |
+| `@TonyStark tournament cancel <name>` | Admin | Deletes a tournament |
+
+Requires the **Server Members**-free `GuildMessageReactions` intent (already enabled in code)
+and the bot needs **Add Reactions**, **Embed Links**, and **Read Message History** permissions
+in the channel. Tournament data is saved to `tournaments.json` (git-ignored, survives restarts).
 
 ## 🛠️ Troubleshooting
 
