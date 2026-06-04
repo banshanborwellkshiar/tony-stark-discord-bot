@@ -6,15 +6,14 @@
  * Handled in code (not the AI) so actions are explicit and reliable.
  * Admins/mods only (Administrator or Manage Server permission).
  *
- * Usage:
- *   @TonyStark create channel <name>           -> new text channel
- *   @TonyStark create voice <name>             -> new voice channel
- *   @TonyStark create category <name>          -> new category
- *   @TonyStark create role <name>              -> new role
- *   @TonyStark announce <message>              -> @everyone announcement (here)
- *   @TonyStark announce #channel <message>     -> announcement in that channel
- *   @TonyStark give @user <role name>          -> give a role to a member
- *   @TonyStark take @user <role name>          -> remove a role from a member
+ * Usage (flexible phrasing):
+ *   @TonyStark create channel <name>            / "create a channel called <name>"
+ *   @TonyStark create voice <name>              / "make a voice channel <name>"
+ *   @TonyStark create category <name>
+ *   @TonyStark create role <name>               / "make a new role <name>"
+ *   @TonyStark announce <message>               / "announce #channel <message>"
+ *   @TonyStark give @user <role name>
+ *   @TonyStark take @user <role name>
  */
 
 const { ChannelType, PermissionsBitField, EmbedBuilder } = require('discord.js');
@@ -27,23 +26,18 @@ function isAdmin(member) {
   );
 }
 
-// Specific patterns so normal chat ("give me a joke") doesn't trigger admin actions.
-const TRIGGERS = [
-  /^create\s+(channel|voice|category|role)\b/i,
-  /^announce\b/i,
-  /^(give|take)\s+<@!?\d+>/i,
-];
+// "create/make/add [a|an|the|new|text] <kind> [called|named|for] <name>"
+const CREATE_RE =
+  /^(?:create|make|add)\s+(?:(?:a|an|the|new|text)\s+)*(voice\s*channel|channel|voice|category|role)\b\s*(?:called\s+|named\s+|for\s+|:\s*)?(.*)$/i;
+const ANNOUNCE_RE = /^announce\b/i;
+const GIVE_TAKE_RE = /^(give|take)\s+<@!?\d+>/i;
 
 /** True when the (mention-stripped) text is an admin command. */
 function isAdminCommand(text) {
   const t = text.trim();
-  return TRIGGERS.some((re) => re.test(t));
+  return CREATE_RE.test(t) || ANNOUNCE_RE.test(t) || GIVE_TAKE_RE.test(t);
 }
 
-/**
- * @param {import('discord.js').Message} message
- * @param {string} text - message with the bot mention already removed
- */
 async function handleAdminCommand(message, text) {
   if (!message.guild) {
     await message.reply('🏠 This only works inside a server.');
@@ -54,12 +48,12 @@ async function handleAdminCommand(message, text) {
     return;
   }
 
-  const first = text.trim().split(/\s+/)[0].toLowerCase();
+  const t = text.trim();
   try {
-    if (first === 'create') return await handleCreate(message, text);
-    if (first === 'announce') return await handleAnnounce(message, text);
-    if (first === 'give') return await handleGiveTake(message, text, 'give');
-    if (first === 'take') return await handleGiveTake(message, text, 'take');
+    if (CREATE_RE.test(t)) return await handleCreate(message, t);
+    if (ANNOUNCE_RE.test(t)) return await handleAnnounce(message, text);
+    const gt = t.match(/^(give|take)\b/i);
+    if (gt) return await handleGiveTake(message, text, gt[1].toLowerCase());
   } catch (err) {
     console.error('admin command error:', err.message);
     await message.reply(
@@ -71,11 +65,18 @@ async function handleAdminCommand(message, text) {
 // ---------------------------------------------------------------------------
 
 async function handleCreate(message, text) {
-  const parts = text.trim().split(/\s+/);
-  const kind = parts[1].toLowerCase();
-  const name = parts.slice(2).join(' ').trim();
+  const m = text.match(CREATE_RE);
+  const kindRaw = m[1].toLowerCase().replace(/\s+/g, ' ');
+  const name = (m[2] || '').trim();
+
+  let kind;
+  if (kindRaw === 'category') kind = 'category';
+  else if (kindRaw === 'role') kind = 'role';
+  else if (kindRaw === 'voice' || kindRaw === 'voice channel') kind = 'voice';
+  else kind = 'channel'; // "channel" / "text channel"
+
   if (!name) {
-    await message.reply(`Usage: \`@TonyStark create ${kind} <name>\``);
+    await message.reply(`What should I name the ${kind}? e.g. \`@TonyStark create ${kind} my-${kind}\``);
     return;
   }
 
@@ -97,7 +98,6 @@ async function handleCreate(message, text) {
 async function handleAnnounce(message, text) {
   let content = text.replace(/^announce\s*/i, '').trim();
 
-  // Optional target channel: "announce #channel ..."
   let target = message.channel;
   const chMatch = content.match(/^<#(\d+)>\s*/);
   if (chMatch) {
@@ -134,9 +134,9 @@ async function handleAnnounce(message, text) {
 }
 
 async function handleGiveTake(message, text, action) {
-  const target = message.mentions.members?.filter(
-    (m) => m.id !== message.client.user.id
-  ).first();
+  const target = message.mentions.members
+    ?.filter((m) => m.id !== message.client.user.id)
+    .first();
   if (!target) {
     await message.reply(`Usage: \`@TonyStark ${action} @user <role name>\``);
     return;
