@@ -54,12 +54,50 @@ async function retrieve(query, { k = 5, minSim = 0.5 } = {}) {
 function buildContext(docs) {
   if (!docs || docs.length === 0) return '';
   return docs
-    .map(
-      (d, i) =>
+    .map((d, i) => {
+      let s =
         `[${i + 1}] (${d.source_type}) sim=${Number(d.similarity).toFixed(2)}\n` +
-        `Khasi: ${d.khasi_text}\nEnglish: ${d.english_text}`
-    )
+        `Khasi: ${d.khasi_text}`;
+      if (d.english_text && d.english_text.trim()) s += `\nEnglish: ${d.english_text}`;
+      return s;
+    })
     .join('\n\n');
+}
+
+/** Adds a knowledge entry (e.g. community-taught Khasi). Embeds the Khasi text. */
+async function insertKnowledge({ khasi, english = '', sourceType = 'community', title = null, metadata = {} }) {
+  if (!RAG_ON) return { ok: false, error: 'knowledge base not configured' };
+  try {
+    const textToEmbed = khasi || english;
+    if (!textToEmbed) return { ok: false, error: 'nothing to learn' };
+    const embedding = await embed(textToEmbed, 'RETRIEVAL_DOCUMENT', {
+      maxAttempts: 3,
+      baseDelayMs: 8000,
+    });
+    const { data, error } = await supabase
+      .from('kb_documents')
+      .insert({
+        source_type: sourceType,
+        title,
+        khasi_text: khasi || '',
+        english_text: english || '',
+        metadata,
+        embedding,
+      })
+      .select('id')
+      .single();
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, id: data.id };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+/** Removes a knowledge entry by id (admin moderation). */
+async function deleteKnowledge(id) {
+  if (!RAG_ON) return { ok: false, error: 'knowledge base not configured' };
+  const { error } = await supabase.from('kb_documents').delete().eq('id', id);
+  return error ? { ok: false, error: error.message } : { ok: true };
 }
 
 /** Logs a conversation turn to Supabase (no-op if RAG is off). Fire-and-forget. */
@@ -79,4 +117,11 @@ async function logConversation(c) {
   }
 }
 
-module.exports = { retrieve, buildContext, logConversation, RAG_ON };
+module.exports = {
+  retrieve,
+  buildContext,
+  logConversation,
+  insertKnowledge,
+  deleteKnowledge,
+  RAG_ON,
+};

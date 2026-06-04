@@ -26,6 +26,7 @@ const {
 const axios = require('axios');
 const { handleTournamentCommand, isTournamentCommand } = require('./tournament');
 const { handleAdminCommand, isAdminCommand } = require('./admin');
+const { handleTeachCommand, isTeachCommand } = require('./teach');
 const { retrieve, buildContext, logConversation } = require('./rag');
 
 // ---------------------------------------------------------------------------
@@ -326,6 +327,12 @@ client.on(Events.MessageCreate, async (message) => {
     // 3c. Admin actions (create channel/voice/category/role) — handled in code.
     if (isAdminCommand(userText)) {
       await handleAdminCommand(message, userText);
+      return;
+    }
+
+    // 3d. Community "teach Tony Khasi" — adds real Khasi to the knowledge base.
+    if (isTeachCommand(userText)) {
+      await handleTeachCommand(message, userText);
       return;
     }
 
