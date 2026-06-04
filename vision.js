@@ -30,19 +30,27 @@ function getImageAttachment(message) {
 
 /**
  * Downloads an image and asks Groq's vision model about it.
- * @param {string} imageUrl
+ * @param {import('discord.js').Attachment} attachment
  * @param {string} question - the user's text (may be empty)
  * @returns {Promise<string>} Tony's answer
  */
-async function describeImage(imageUrl, question) {
+async function describeImage(attachment, question) {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new Error('GROQ_API_KEY is not set');
 
-  // Download the image and inline it as a base64 data URL (most reliable).
-  const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(20000) });
+  // Prefer Discord's media proxy with a size cap, so large phone photos get
+  // shrunk server-side and stay under the vision API's request-size limit.
+  let fetchUrl = attachment.url;
+  if (attachment.proxyURL) {
+    const sep = attachment.proxyURL.includes('?') ? '&' : '?';
+    fetchUrl = `${attachment.proxyURL}${sep}width=768&height=768`;
+  }
+
+  const imgRes = await fetch(fetchUrl, { signal: AbortSignal.timeout(20000) });
   if (!imgRes.ok) throw new Error(`couldn't fetch image (${imgRes.status})`);
   const buf = Buffer.from(await imgRes.arrayBuffer());
-  const mime = imgRes.headers.get('content-type') || 'image/png';
+  const mime =
+    imgRes.headers.get('content-type') || attachment.contentType || 'image/png';
   const dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
 
   const body = {
@@ -67,7 +75,10 @@ async function describeImage(imageUrl, question) {
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(60000),
   });
-  if (!res.ok) throw new Error(`vision request failed (${res.status})`);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`vision request failed (${res.status}): ${errText.slice(0, 200)}`);
+  }
 
   const json = await res.json();
   return json.choices?.[0]?.message?.content?.trim() || '';

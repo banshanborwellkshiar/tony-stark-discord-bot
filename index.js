@@ -312,7 +312,7 @@ client.on(Events.MessageCreate, async (message) => {
     if (imageAtt) {
       const stopTyping = startTyping(message.channel);
       try {
-        const answer = await describeImage(imageAtt.url, userText);
+        const answer = await describeImage(imageAtt, userText);
         await replyInChannel(message, answer || "Hmm — I couldn't make out that image.");
         log.info(`Described an image for ${message.author.tag}.`);
       } catch (err) {
