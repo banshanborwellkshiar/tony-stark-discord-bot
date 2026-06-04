@@ -1,0 +1,26 @@
+[
+  {
+    "source_type": "tournament_rule",
+    "title": "How to join a tournament",
+    "english": "Players join a tournament by reacting with the white check mark emoji on the tournament announcement. Sign-ups close automatically when an admin starts the tournament.",
+    "khasi": "REPLACE WITH REAL KHASI: the Khasi translation of the English above (please have a fluent Khasi speaker check it)."
+  },
+  {
+    "source_type": "tournament_rule",
+    "title": "Brackets",
+    "english": "When an admin starts the tournament, players are shuffled randomly and paired into Round 1 matches. If the number of players is odd, one player gets a bye and advances automatically.",
+    "khasi": "REPLACE WITH REAL KHASI translation of the English above."
+  },
+  {
+    "source_type": "faq",
+    "title": "What can Tony Stark do?",
+    "english": "Tony Stark can chat, remember your conversation, look up facts on Wikipedia, and run gaming tournaments with automatic brackets. He understands English, Hinglish, and Khasi.",
+    "khasi": "REPLACE WITH REAL KHASI translation of the English above."
+  },
+  {
+    "source_type": "faq",
+    "title": "Who can create tournaments?",
+    "english": "Only server admins and moderators can create, start, or cancel tournaments. Regular members can join and view.",
+    "khasi": "REPLACE WITH REAL KHASI translation of the English above."
+  }
+]

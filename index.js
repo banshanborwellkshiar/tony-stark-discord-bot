@@ -25,6 +25,7 @@ const {
 } = require('discord.js');
 const axios = require('axios');
 const { handleTournamentCommand, isTournamentCommand } = require('./tournament');
+const { retrieve, buildContext, logConversation } = require('./rag');
 
 // ---------------------------------------------------------------------------
 // Configuration & environment validation
@@ -338,8 +339,17 @@ client.on(Events.MessageCreate, async (message) => {
     const stopTyping = startTyping(message.channel);
 
     try {
+      // RAG: pull relevant bilingual Khasi knowledge and prepend it as context.
+      // Returns [] (no change) when RAG isn't configured, so this is always safe.
+      const docs = await retrieve(userText, { k: 5 });
+      const context = buildContext(docs);
+      const messageForAi = context
+        ? `KHASI KNOWLEDGE (use this for correct Khasi; reply in the user's language):\n` +
+          `${context}\n\n--- USER MESSAGE ---\n${userText}`
+        : userText;
+
       const payload = {
-        message: userText,
+        message: messageForAi,
         userId: message.author.id,
         username: message.author.username,
         channelId: message.channelId,
@@ -357,6 +367,16 @@ client.on(Events.MessageCreate, async (message) => {
 
       await replyInChannel(message, reply);
       log.info(`Replied to ${message.author.tag} (${reply.length} chars).`);
+
+      // Log the turn for analytics + a future Khasi fine-tuning dataset (no-op if RAG off).
+      logConversation({
+        userId: message.author.id,
+        username: message.author.username,
+        channelId: message.channelId,
+        userMessage: userText,
+        retrievedIds: docs.map((d) => d.id),
+        reply,
+      });
     } finally {
       stopTyping();
     }
