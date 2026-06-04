@@ -15,7 +15,10 @@
 
 const { AttachmentBuilder } = require('discord.js');
 
-const MODEL = '@cf/black-forest-labs/flux-1-schnell';
+// Default to the FREE model; override with CLOUDFLARE_IMAGE_MODEL in .env to use
+// e.g. "black-forest-labs/flux-2-pro-preview" (premium — may require billing).
+const MODEL =
+  process.env.CLOUDFLARE_IMAGE_MODEL || '@cf/black-forest-labs/flux-1-schnell';
 const TRIGGERS = ['image', 'draw'];
 
 const IMAGE_ON = Boolean(
@@ -44,7 +47,7 @@ async function generateImage(prompt) {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ prompt, steps: 4 }),
+    body: JSON.stringify({ prompt, seed: Math.floor(Math.random() * 1_000_000) }),
     signal: AbortSignal.timeout(60000),
   });
 
@@ -53,10 +56,18 @@ async function generateImage(prompt) {
     throw new Error(`cloudflare ${res.status}: ${t.slice(0, 200)}`);
   }
 
-  const json = await res.json();
-  const b64 = json?.result?.image;
-  if (!b64) throw new Error('no image returned by Cloudflare');
-  return Buffer.from(b64, 'base64'); // FLUX schnell returns a base64 JPEG
+  // flux-1-schnell returns JSON { result: { image: "<base64>" } };
+  // some models stream the image back as raw binary. Handle both.
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    const json = await res.json();
+    const b64 = json?.result?.image;
+    if (!b64) {
+      throw new Error(`no image in response: ${JSON.stringify(json).slice(0, 200)}`);
+    }
+    return Buffer.from(b64, 'base64');
+  }
+  return Buffer.from(await res.arrayBuffer());
 }
 
 /**
