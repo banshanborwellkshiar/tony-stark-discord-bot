@@ -25,6 +25,7 @@ const {
 } = require('discord.js');
 const axios = require('axios');
 const { handleTournamentCommand, isTournamentCommand } = require('./tournament');
+const { handleAdminCommand, isAdminCommand } = require('./admin');
 const { retrieve, buildContext, logConversation } = require('./rag');
 
 // ---------------------------------------------------------------------------
@@ -319,6 +320,12 @@ client.on(Events.MessageCreate, async (message) => {
         return;
       }
       await handleTournamentCommand(message, userText);
+      return;
+    }
+
+    // 3c. Admin actions (create channel/voice/category/role) — handled in code.
+    if (isAdminCommand(userText)) {
+      await handleAdminCommand(message, userText);
       return;
     }
 
