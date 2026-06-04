@@ -19,7 +19,12 @@ const { AttachmentBuilder } = require('discord.js');
 // e.g. "black-forest-labs/flux-2-pro-preview" (premium — may require billing).
 const MODEL =
   process.env.CLOUDFLARE_IMAGE_MODEL || '@cf/black-forest-labs/flux-1-schnell';
-const TRIGGERS = ['image', 'draw'];
+
+// First-word triggers: everything after the word becomes the prompt.
+const FIRST_WORD_TRIGGERS = ['image', 'draw', 'generate', 'imagine', 'render'];
+// Phrase triggers like "create an image of ..." / "make a picture of ...".
+const PHRASE_TRIGGER =
+  /^(?:create|make)\s+(?:an?\s+)?(?:image|images|picture|pic|art|drawing)(?:\s+of)?\s*/i;
 
 const IMAGE_ON = Boolean(
   process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN
@@ -28,11 +33,16 @@ const IMAGE_ON = Boolean(
 /** True when the (mention-stripped) text is an image command. */
 function isImageCommand(text) {
   const t = text.trim().toLowerCase();
-  return TRIGGERS.some((w) => t === w || t.startsWith(w + ' '));
+  if (FIRST_WORD_TRIGGERS.some((w) => t === w || t.startsWith(w + ' '))) return true;
+  return PHRASE_TRIGGER.test(text.trim());
 }
 
 function extractPrompt(text) {
-  return text.trim().split(/\s+/).slice(1).join(' ').trim();
+  const t = text.trim();
+  // "create an image of X" / "make a picture of X" -> X
+  if (PHRASE_TRIGGER.test(t)) return t.replace(PHRASE_TRIGGER, '').trim();
+  // first-word form -> drop the trigger word
+  return t.split(/\s+/).slice(1).join(' ').trim();
 }
 
 /** Generates an image and returns a JPEG Buffer. */
