@@ -17,6 +17,7 @@
  */
 
 const { ChannelType, PermissionsBitField, EmbedBuilder } = require('discord.js');
+const config = require('./config');
 
 function isAdmin(member) {
   if (!member) return false;
@@ -31,11 +32,19 @@ const CREATE_RE =
   /^(?:create|make|add)\s+(?:(?:a|an|the|new|text)\s+)*(voice\s*channel|channel|voice|category|role)\b\s*(?:called\s+|named\s+|for\s+|:\s*)?(.*)$/i;
 const ANNOUNCE_RE = /^announce\b/i;
 const GIVE_TAKE_RE = /^(give|take)\s+<@!?\d+>/i;
+const LOCK_RE = /^(lock|restrict)\b/i;
+const UNLOCK_RE = /^unlock\b/i;
 
 /** True when the (mention-stripped) text is an admin command. */
 function isAdminCommand(text) {
   const t = text.trim();
-  return CREATE_RE.test(t) || ANNOUNCE_RE.test(t) || GIVE_TAKE_RE.test(t);
+  return (
+    CREATE_RE.test(t) ||
+    ANNOUNCE_RE.test(t) ||
+    GIVE_TAKE_RE.test(t) ||
+    LOCK_RE.test(t) ||
+    UNLOCK_RE.test(t)
+  );
 }
 
 async function handleAdminCommand(message, text) {
@@ -50,6 +59,8 @@ async function handleAdminCommand(message, text) {
 
   const t = text.trim();
   try {
+    if (UNLOCK_RE.test(t)) return await handleUnlock(message);
+    if (LOCK_RE.test(t)) return await handleLock(message, t);
     if (CREATE_RE.test(t)) return await handleCreate(message, t);
     if (ANNOUNCE_RE.test(t)) return await handleAnnounce(message, text);
     const gt = t.match(/^(give|take)\b/i);
@@ -166,6 +177,50 @@ async function handleGiveTake(message, text, action) {
     await target.roles.remove(role);
     await message.reply(`✅ Removed ${role} from ${target}.`);
   }
+}
+
+async function handleLock(message, text) {
+  const mentionedRole = message.mentions.roles?.first();
+  let roleName;
+  if (mentionedRole) {
+    roleName = mentionedRole.name;
+  } else {
+    roleName = text
+      .replace(/^(lock|restrict)(\s+to)?\s*/i, '')
+      .replace(/<@&\d+>/g, '')
+      .trim();
+  }
+
+  if (!roleName) {
+    const current = config.getAllowedRole(message.guild.id);
+    await message.reply(
+      current
+        ? `🔒 I'm currently locked to the **${current}** role. \`@TonyStark lock <role>\` to change, or \`@TonyStark unlock\` to open to everyone.`
+        : 'Usage: `@TonyStark lock <role name>` (or @mention the role). Use `@TonyStark unlock` to remove it.'
+    );
+    return;
+  }
+
+  const role = message.guild.roles.cache.find(
+    (r) => r.name.toLowerCase() === roleName.toLowerCase()
+  );
+  if (!role) {
+    await message.reply(
+      `I can't find a role called **${roleName}**. Create it first (\`@TonyStark create role ${roleName}\`) or check the spelling.`
+    );
+    return;
+  }
+
+  config.setAllowedRole(message.guild.id, role.name);
+  await message.reply(
+    `🔒 Locked. Now only members with the **${role.name}** role (and admins) can use me.\n` +
+      `Give it to people with \`@TonyStark give @user ${role.name}\`. Run \`@TonyStark unlock\` to open it up again.`
+  );
+}
+
+async function handleUnlock(message) {
+  config.clearAllowedRole(message.guild.id);
+  await message.reply('🔓 Unlocked. Everyone can use me again.');
 }
 
 module.exports = { isAdminCommand, handleAdminCommand };

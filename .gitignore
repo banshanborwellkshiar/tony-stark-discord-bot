@@ -19,6 +19,7 @@ pnpm-debug.log*
 
 # Runtime data (created by the bot at runtime)
 tournaments.json
+config.json
 
 # Runtime / cache
 .npm

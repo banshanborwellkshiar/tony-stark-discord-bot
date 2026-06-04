@@ -32,6 +32,7 @@ const { getImageAttachment, describeImage } = require('./vision');
 const { handleImageCommand, isImageCommand } = require('./image');
 const { handleApprovalReaction } = require('./autolearn');
 const { retrieve, buildContext, logConversation } = require('./rag');
+const config = require('./config');
 
 // ---------------------------------------------------------------------------
 // Configuration & environment validation
@@ -142,8 +143,19 @@ setInterval(() => {
 
 const deniedAt = new Map(); // userId -> last "you can't use me" notice (ms)
 
+// The lock role can be set by command (per-guild, in config.json) or via the
+// TONY_ALLOWED_ROLE env var as a fallback default.
+function getAllowedRoleName(message) {
+  return (
+    (message.guild && config.getAllowedRole(message.guild.id)) ||
+    CONFIG.TONY_ALLOWED_ROLE ||
+    null
+  );
+}
+
 function canUseTony(message) {
-  if (!CONFIG.TONY_ALLOWED_ROLE) return true; // gate disabled (default)
+  const allowed = getAllowedRoleName(message);
+  if (!allowed) return true; // no lock set (default)
   if (!message.guild) return true; // DMs aren't gated
   const member = message.member;
   if (!member) return false;
@@ -153,18 +165,17 @@ function canUseTony(message) {
   ) {
     return true; // admins/mods always allowed
   }
-  const allowed = CONFIG.TONY_ALLOWED_ROLE.trim().toLowerCase();
-  return member.roles.cache.some((r) => r.name.toLowerCase() === allowed);
+  const allowedLc = allowed.trim().toLowerCase();
+  return member.roles.cache.some((r) => r.name.toLowerCase() === allowedLc);
 }
 
 function notifyDenied(message) {
   const now = Date.now();
   if (now - (deniedAt.get(message.author.id) || 0) < 300_000) return; // once / 5 min
   deniedAt.set(message.author.id, now);
+  const allowed = getAllowedRoleName(message);
   message
-    .reply(
-      `🔒 You need the **${CONFIG.TONY_ALLOWED_ROLE}** role to use me. Ask an admin.`
-    )
+    .reply(`🔒 You need the **${allowed}** role to use me. Ask an admin.`)
     .catch(() => {});
 }
 
