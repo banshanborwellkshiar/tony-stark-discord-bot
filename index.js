@@ -29,6 +29,7 @@ const { handleAdminCommand, isAdminCommand } = require('./admin');
 const { handleTeachCommand, isTeachCommand } = require('./teach');
 const { getImageAttachment, describeImage } = require('./vision');
 const { handleImageCommand, isImageCommand } = require('./image');
+const { handleApprovalReaction } = require('./autolearn');
 const { retrieve, buildContext, logConversation } = require('./rag');
 
 // ---------------------------------------------------------------------------
@@ -436,6 +437,11 @@ client.on(Events.MessageCreate, async (message) => {
 // ---------------------------------------------------------------------------
 // Client-level error handling & graceful shutdown
 // ---------------------------------------------------------------------------
+
+// 👍 auto-learn: approving one of Tony's replies saves it to the knowledge base.
+client.on(Events.MessageReactionAdd, (reaction, user) => {
+  handleApprovalReaction(reaction, user, client);
+});
 
 client.on(Events.Error, (err) => log.error(`Discord client error: ${err.message}`));
 client.on(Events.Warn, (info) => log.warn(`Discord warning: ${info}`));
