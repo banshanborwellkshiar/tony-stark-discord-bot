@@ -27,6 +27,7 @@ const axios = require('axios');
 const { handleTournamentCommand, isTournamentCommand } = require('./tournament');
 const { handleAdminCommand, isAdminCommand } = require('./admin');
 const { handleTeachCommand, isTeachCommand } = require('./teach');
+const { getImageAttachment, describeImage } = require('./vision');
 const { retrieve, buildContext, logConversation } = require('./rag');
 
 // ---------------------------------------------------------------------------
@@ -305,6 +306,24 @@ client.on(Events.MessageCreate, async (message) => {
 
     // 3. Extract the real user message.
     const userText = cleanContent(message, client.user.id);
+
+    // 3a. Vision: if the message includes an image, look at it (Groq Llama 4).
+    const imageAtt = getImageAttachment(message);
+    if (imageAtt) {
+      const stopTyping = startTyping(message.channel);
+      try {
+        const answer = await describeImage(imageAtt.url, userText);
+        await replyInChannel(message, answer || "Hmm — I couldn't make out that image.");
+        log.info(`Described an image for ${message.author.tag}.`);
+      } catch (err) {
+        log.error(`Vision failed: ${err.message}`);
+        await message.reply("⚠️ I couldn't read that image right now. Try again in a bit.");
+      } finally {
+        stopTyping();
+      }
+      return;
+    }
+
     if (!userText) {
       await message.reply(
         "👋 Hi, I'm Tony Stark. Mention me with a message and I'll respond — " +
