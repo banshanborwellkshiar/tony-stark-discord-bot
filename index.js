@@ -28,6 +28,7 @@ const { handleTournamentCommand, isTournamentCommand } = require('./tournament')
 const { handleAdminCommand, isAdminCommand } = require('./admin');
 const { handleTeachCommand, isTeachCommand } = require('./teach');
 const { getImageAttachment, describeImage } = require('./vision');
+const { handleImageCommand, isImageCommand } = require('./image');
 const { retrieve, buildContext, logConversation } = require('./rag');
 
 // ---------------------------------------------------------------------------
@@ -352,6 +353,12 @@ client.on(Events.MessageCreate, async (message) => {
     // 3d. Community "teach Tony Khasi" — adds real Khasi to the knowledge base.
     if (isTeachCommand(userText)) {
       await handleTeachCommand(message, userText);
+      return;
+    }
+
+    // 3e. Image generation (Cloudflare Workers AI) — handled in code.
+    if (isImageCommand(userText)) {
+      await handleImageCommand(message, userText);
       return;
     }
 
