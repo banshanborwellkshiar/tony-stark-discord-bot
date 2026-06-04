@@ -16,9 +16,11 @@ const fs = require('node:fs');
 const { createClient } = require('@supabase/supabase-js');
 const { embed } = require('./embed');
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY
 );
 
 /** Splits aligned Khasi/English text into paragraph chunks (keeps them paired). */
@@ -53,7 +55,11 @@ function chunkPairs(khasi, english, maxChars = 600) {
       if (!c.english) continue;
 
       // Embed the ENGLISH text for robust cross-lingual retrieval.
-      const embedding = await embed(c.english, 'RETRIEVAL_DOCUMENT');
+      // Many retries here: ingestion is one-time, so waiting out throttling is fine.
+      const embedding = await embed(c.english, 'RETRIEVAL_DOCUMENT', {
+        maxAttempts: 5,
+        baseDelayMs: 12000,
+      });
 
       const { error } = await supabase.from('kb_documents').insert({
         source_type: item.source_type,
@@ -69,6 +75,7 @@ function chunkPairs(khasi, english, maxChars = 600) {
         inserted++;
         console.log(`✓ ${item.source_type} [${idx}] ${item.title ?? ''}`);
       }
+      await sleep(4000); // pace requests to stay under the free embedding rate limit
     }
   }
 

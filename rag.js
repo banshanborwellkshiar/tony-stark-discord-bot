@@ -32,7 +32,9 @@ if (RAG_ON) {
 async function retrieve(query, { k = 5, minSim = 0.5 } = {}) {
   if (!RAG_ON) return [];
   try {
-    const query_embedding = await embed(query, 'RETRIEVAL_QUERY');
+    // Fail fast at query time: 1 attempt. If embeddings throttle, we skip RAG
+    // and answer without context rather than making the user wait.
+    const query_embedding = await embed(query, 'RETRIEVAL_QUERY', { maxAttempts: 1 });
     const { data, error } = await supabase.rpc('match_kb', {
       query_embedding,
       match_count: k,
