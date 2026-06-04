@@ -45,6 +45,16 @@ function extractPrompt(text) {
   return t.split(/\s+/).slice(1).join(' ').trim();
 }
 
+/** Nudges the fast model toward cleaner results when the prompt is short/vague. */
+function enhancePrompt(prompt) {
+  const wordCount = prompt.split(/\s+/).filter(Boolean).length;
+  const alreadyDetailed = /detailed|quality|realistic|cinematic|4k|hd|sharp/i.test(prompt);
+  if (wordCount < 8 && !alreadyDetailed) {
+    return `${prompt}, highly detailed, sharp focus, high quality, well composed`;
+  }
+  return prompt;
+}
+
 /** Generates an image and returns a JPEG Buffer. */
 async function generateImage(prompt) {
   const acc = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -107,7 +117,7 @@ async function handleImageCommand(message, text) {
   message.channel.sendTyping().catch(() => {});
 
   try {
-    const buffer = await generateImage(prompt);
+    const buffer = await generateImage(enhancePrompt(prompt));
     const file = new AttachmentBuilder(buffer, { name: 'tony-art.jpg' });
     await message.reply({
       content: `🎨 **"${prompt}"** — fresh out of the workshop:`,
