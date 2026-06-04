@@ -22,6 +22,7 @@ const {
   GatewayIntentBits,
   Partials,
   Events,
+  PermissionsBitField,
 } = require('discord.js');
 const axios = require('axios');
 const { handleTournamentCommand, isTournamentCommand } = require('./tournament');
@@ -40,6 +41,10 @@ const CONFIG = {
   DISCORD_TOKEN: process.env.DISCORD_TOKEN,
   N8N_WEBHOOK_URL: process.env.N8N_WEBHOOK_URL,
   CLIENT_ID: process.env.CLIENT_ID, // optional, used for invite link / logging
+
+  // Optional: restrict Tony to members who have this role (by name). Admins
+  // are always allowed. Leave unset to let everyone use Tony.
+  TONY_ALLOWED_ROLE: process.env.TONY_ALLOWED_ROLE,
 
   // Webhook behaviour
   WEBHOOK_TIMEOUT_MS: parseInt(process.env.WEBHOOK_TIMEOUT_MS || '30000', 10),
@@ -130,6 +135,38 @@ setInterval(() => {
     else rateLimitStore.set(userId, fresh);
   }
 }, 60_000).unref();
+
+// ---------------------------------------------------------------------------
+// Access control — optionally restrict Tony to members with a specific role
+// ---------------------------------------------------------------------------
+
+const deniedAt = new Map(); // userId -> last "you can't use me" notice (ms)
+
+function canUseTony(message) {
+  if (!CONFIG.TONY_ALLOWED_ROLE) return true; // gate disabled (default)
+  if (!message.guild) return true; // DMs aren't gated
+  const member = message.member;
+  if (!member) return false;
+  if (
+    member.permissions.has(PermissionsBitField.Flags.Administrator) ||
+    member.permissions.has(PermissionsBitField.Flags.ManageGuild)
+  ) {
+    return true; // admins/mods always allowed
+  }
+  const allowed = CONFIG.TONY_ALLOWED_ROLE.trim().toLowerCase();
+  return member.roles.cache.some((r) => r.name.toLowerCase() === allowed);
+}
+
+function notifyDenied(message) {
+  const now = Date.now();
+  if (now - (deniedAt.get(message.author.id) || 0) < 300_000) return; // once / 5 min
+  deniedAt.set(message.author.id, now);
+  message
+    .reply(
+      `🔒 You need the **${CONFIG.TONY_ALLOWED_ROLE}** role to use me. Ask an admin.`
+    )
+    .catch(() => {});
+}
 
 // ---------------------------------------------------------------------------
 // n8n webhook caller — POST with timeout + exponential-backoff retries
@@ -305,6 +342,13 @@ client.on(Events.MessageCreate, async (message) => {
 
     // 2. Only respond when the bot is actually mentioned (not @everyone/@here).
     if (!message.mentions.has(client.user) || message.mentions.everyone) return;
+
+    // 2b. Access control — if a role is configured, only those members (and
+    // admins) may use Tony. Prevents misuse of his powerful commands.
+    if (!canUseTony(message)) {
+      notifyDenied(message);
+      return;
+    }
 
     // 3. Extract the real user message.
     const userText = cleanContent(message, client.user.id);
