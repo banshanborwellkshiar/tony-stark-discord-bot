@@ -30,6 +30,7 @@ const { handleAdminCommand, isAdminCommand } = require('./admin');
 const { handleTeachCommand, isTeachCommand } = require('./teach');
 const { getImageAttachment, describeImage } = require('./vision');
 const { handleImageCommand, isImageCommand } = require('./image');
+const { isDocCommand, handleDocCommand } = require('./doc');
 const { handleApprovalReaction } = require('./autolearn');
 const { retrieve, buildContext, logConversation } = require('./rag');
 const config = require('./config');
@@ -381,6 +382,12 @@ client.on(Events.MessageCreate, async (message) => {
       return;
     }
 
+    // 3a2. Knowledge upload: an admin attaches a .md/.txt to teach this channel.
+    if (isDocCommand(message, userText)) {
+      await handleDocCommand(message, userText);
+      return;
+    }
+
     if (!userText) {
       await message.reply(
         "👋 Hi, I'm Tony Stark. Mention me with a message and I'll respond — " +
@@ -437,11 +444,19 @@ client.on(Events.MessageCreate, async (message) => {
     try {
       // RAG: pull relevant bilingual Khasi knowledge and prepend it as context.
       // Returns [] (no change) when RAG isn't configured, so this is always safe.
-      const docs = await retrieve(userText, { k: 5 });
+      const docs = await retrieve(userText, {
+        k: 5,
+        scopes: [message.channel?.parentId, message.channelId].filter(Boolean),
+      });
       const context = buildContext(docs);
       const messageForAi = context
-        ? `KHASI KNOWLEDGE (use this for correct Khasi; reply in the user's language):\n` +
-          `${context}\n\n--- USER MESSAGE ---\n${userText}`
+        ? `You are replying inside a specific category of this Discord server. Below is this ` +
+          `category's GUIDE — what it is about and the rules you must follow when replying here. ` +
+          `Follow these rules and base your answer on this information. If the user asks about ` +
+          `something (events, scrims, tournaments, schedules, rules) that the guide does NOT ` +
+          `cover, say you don't have that info for this category — do NOT make up details. ` +
+          `Reply in the user's language.\n\n` +
+          `=== CATEGORY GUIDE ===\n${context}\n\n=== USER MESSAGE ===\n${userText}`
         : userText;
 
       const payload = {

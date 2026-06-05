@@ -29,18 +29,20 @@ if (RAG_ON) {
 }
 
 /** Retrieves the top-k bilingual chunks relevant to `query`. Returns [] if RAG is off. */
-async function retrieve(query, { k = 5, minSim = 0.5 } = {}) {
+async function retrieve(query, { k = 5, minSim = 0.5, scopes = null } = {}) {
   if (!RAG_ON) return [];
   try {
     // Fail fast at query time: 1 attempt. If embeddings throttle, we skip RAG
     // and answer without context rather than making the user wait.
     const query_embedding = await embed(query, 'RETRIEVAL_QUERY', { maxAttempts: 1 });
-    const { data, error } = await supabase.rpc('match_kb', {
+    // Scoped: this channel/category's uploaded docs + the global base (Khasi).
+    const { data, error } = await supabase.rpc('match_kb_scoped', {
       query_embedding,
+      p_scopes: scopes && scopes.length ? scopes : null,
       match_count: k,
     });
     if (error) {
-      console.error('match_kb error:', error.message);
+      console.error('match_kb_scoped error:', error.message);
       return [];
     }
     return (data || []).filter((d) => d.similarity >= minSim);
@@ -65,7 +67,15 @@ function buildContext(docs) {
 }
 
 /** Adds a knowledge entry (e.g. community-taught Khasi). Embeds the Khasi text. */
-async function insertKnowledge({ khasi, english = '', sourceType = 'community', title = null, metadata = {} }) {
+async function insertKnowledge({
+  khasi,
+  english = '',
+  sourceType = 'community',
+  title = null,
+  guildId = null,
+  scopeId = null,
+  metadata = {},
+}) {
   if (!RAG_ON) return { ok: false, error: 'knowledge base not configured' };
   try {
     const textToEmbed = khasi || english;
@@ -81,6 +91,8 @@ async function insertKnowledge({ khasi, english = '', sourceType = 'community', 
         title,
         khasi_text: khasi || '',
         english_text: english || '',
+        guild_id: guildId,
+        scope_id: scopeId,
         metadata,
         embedding,
       })
