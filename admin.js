@@ -29,7 +29,22 @@ function isAdmin(member) {
 
 // "create/make/add [a|an|the|new|text] <kind> [called|named|for] <name>"
 const CREATE_RE =
-  /^(?:create|make|add)\s+(?:(?:a|an|the|new|text)\s+)*(voice\s*channel|channel|voice|category|role)\b\s*(?:called\s+|named\s+|for\s+|:\s*)?(.*)$/i;
+  /^(?:create|make|add)\s+(?:(?:a|an|the|new|text|private|hidden|secret)\s+)*(voice\s*channel|channel|voice|category|role)\b\s*(?:called\s+|named\s+|for\s+|:\s*)?(.*)$/i;
+
+/** Permission overwrites that make a channel admin-only (hidden from @everyone). */
+function privateOverwrites(message) {
+  return [
+    { id: message.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+    {
+      id: message.client.user.id,
+      allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+    },
+    {
+      id: message.author.id,
+      allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+    },
+  ];
+}
 const ANNOUNCE_RE = /^announce\b/i;
 const GIVE_TAKE_RE = /^(give|take)\s+<@!?\d+>/i;
 const LOCK_RE = /^(lock|restrict)\b/i;
@@ -79,6 +94,7 @@ async function handleCreate(message, text) {
   const m = text.match(CREATE_RE);
   const kindRaw = m[1].toLowerCase().replace(/\s+/g, ' ');
   const name = (m[2] || '').trim();
+  const isPrivate = /\b(?:private|hidden|secret)\b/i.test(text);
 
   let kind;
   if (kindRaw === 'category') kind = 'category';
@@ -91,15 +107,30 @@ async function handleCreate(message, text) {
     return;
   }
 
+  const overwrites = isPrivate ? privateOverwrites(message) : undefined;
+  const tag = isPrivate ? '🔒 private ' : '';
+
   if (kind === 'channel') {
-    const ch = await message.guild.channels.create({ name, type: ChannelType.GuildText });
-    await message.reply(`✅ Created text channel ${ch}.`);
+    const ch = await message.guild.channels.create({
+      name,
+      type: ChannelType.GuildText,
+      permissionOverwrites: overwrites,
+    });
+    await message.reply(`✅ Created ${tag}text channel ${ch}.`);
   } else if (kind === 'voice') {
-    const ch = await message.guild.channels.create({ name, type: ChannelType.GuildVoice });
-    await message.reply(`✅ Created voice channel **${ch.name}**.`);
+    const ch = await message.guild.channels.create({
+      name,
+      type: ChannelType.GuildVoice,
+      permissionOverwrites: overwrites,
+    });
+    await message.reply(`✅ Created ${tag}voice channel **${ch.name}**.`);
   } else if (kind === 'category') {
-    const ch = await message.guild.channels.create({ name, type: ChannelType.GuildCategory });
-    await message.reply(`✅ Created category **${ch.name}**.`);
+    const ch = await message.guild.channels.create({
+      name,
+      type: ChannelType.GuildCategory,
+      permissionOverwrites: overwrites,
+    });
+    await message.reply(`✅ Created ${tag}category **${ch.name}**.`);
   } else if (kind === 'role') {
     const role = await message.guild.roles.create({ name, mentionable: true });
     await message.reply(`✅ Created role ${role}.`);
