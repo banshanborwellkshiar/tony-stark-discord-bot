@@ -184,7 +184,8 @@ function notifyDenied(message) {
 // Info channel — read a #info / #rules channel as live grounding
 // ---------------------------------------------------------------------------
 
-const INFO_NAME_RE = /^(?:info|information|rules|about|details|guide)/i;
+// Matches "info"/"rules"/etc. anywhere in the name (e.g. "server-info", "📌-rules").
+const INFO_NAME_RE = /\b(?:info|information|rules|about|guide|details)\b/i;
 const infoCache = new Map(); // channelId -> { text, name, ts }
 
 async function getInfoChannelText(message) {
@@ -217,6 +218,7 @@ async function getInfoChannelText(message) {
       .slice(0, 2500);
     const entry = { text, name: infoCh.name, ts: Date.now() };
     infoCache.set(infoCh.id, entry);
+    if (text) log.info(`Grounding in #${infoCh.name} (${text.length} chars).`);
     return text ? entry : null;
   } catch (err) {
     log.warn(`Couldn't read info channel #${infoCh.name}: ${err.message}`);
