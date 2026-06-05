@@ -107,21 +107,20 @@ async function handleCreate(message, text) {
 }
 
 async function handleAnnounce(message, text) {
-  let content = text.replace(/^announce\s*/i, '').trim();
+  // Use any #channel mentioned anywhere as the target; else the current channel.
+  const target = message.mentions.channels?.first() || message.channel;
 
-  let target = message.channel;
-  const chMatch = content.match(/^<#(\d+)>\s*/);
-  if (chMatch) {
-    const ch = message.guild.channels.cache.get(chMatch[1]);
-    if (ch) {
-      target = ch;
-      content = content.replace(/^<#\d+>\s*/, '').trim();
-    }
-  }
+  // Strip "announce", the channel mention, and a leading filler word (in/to/on).
+  let content = text
+    .replace(/^announce\s*/i, '')
+    .replace(/<#\d+>/g, '')
+    .replace(/^\s*(?:in|to|on|into|at)\b\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
   if (!content) {
     await message.reply(
-      'Usage: `@TonyStark announce <message>` or `@TonyStark announce #channel <message>`'
+      'Usage: `@TonyStark announce #channel <message>` (or just `announce <message>` for here).'
     );
     return;
   }
