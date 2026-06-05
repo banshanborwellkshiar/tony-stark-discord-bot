@@ -181,6 +181,50 @@ function notifyDenied(message) {
 }
 
 // ---------------------------------------------------------------------------
+// Info channel — read a #info / #rules channel as live grounding
+// ---------------------------------------------------------------------------
+
+const INFO_NAME_RE = /^(?:info|information|rules|about|details|guide)/i;
+const infoCache = new Map(); // channelId -> { text, name, ts }
+
+async function getInfoChannelText(message) {
+  if (!message.guild) return null;
+  const candidates = message.guild.channels.cache.filter(
+    (c) =>
+      typeof c.isTextBased === 'function' &&
+      c.isTextBased() &&
+      INFO_NAME_RE.test(c.name)
+  );
+  if (candidates.size === 0) return null;
+
+  // Prefer an info channel in the same category as the current channel.
+  const sameCat =
+    message.channel?.parentId &&
+    candidates.find((c) => c.parentId === message.channel.parentId);
+  const infoCh = sameCat || candidates.first();
+  if (!infoCh) return null;
+
+  const cached = infoCache.get(infoCh.id);
+  if (cached && Date.now() - cached.ts < 60_000) return cached.text ? cached : null;
+
+  try {
+    const msgs = await infoCh.messages.fetch({ limit: 20 });
+    const text = [...msgs.values()]
+      .reverse()
+      .filter((m) => !m.author.bot && m.content && m.content.trim())
+      .map((m) => m.content.trim())
+      .join('\n')
+      .slice(0, 2500);
+    const entry = { text, name: infoCh.name, ts: Date.now() };
+    infoCache.set(infoCh.id, entry);
+    return text ? entry : null;
+  } catch (err) {
+    log.warn(`Couldn't read info channel #${infoCh.name}: ${err.message}`);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // n8n webhook caller — POST with timeout + exponential-backoff retries
 // ---------------------------------------------------------------------------
 
@@ -449,14 +493,25 @@ client.on(Events.MessageCreate, async (message) => {
         scopes: [message.channel?.parentId, message.channelId].filter(Boolean),
       });
       const context = buildContext(docs);
-      const messageForAi = context
-        ? `You are replying inside a specific category of this Discord server. Below is this ` +
-          `category's GUIDE — what it is about and the rules you must follow when replying here. ` +
-          `Follow these rules and base your answer on this information. If the user asks about ` +
-          `something (events, scrims, tournaments, schedules, rules) that the guide does NOT ` +
-          `cover, say you don't have that info for this category — do NOT make up details. ` +
-          `Reply in the user's language.\n\n` +
-          `=== CATEGORY GUIDE ===\n${context}\n\n=== USER MESSAGE ===\n${userText}`
+
+      // Ground replies in, in priority order:
+      //  (a) the #info / #rules channel's content (read live, no file needed),
+      //  (b) the channel's Topic/Description,
+      //  (c) any uploaded category .md.
+      const info = await getInfoChannelText(message);
+      const channelInfo = (message.channel?.topic || '').trim();
+      const knowledgeParts = [];
+      if (info) knowledgeParts.push(`SERVER INFO (from #${info.name} channel):\n${info.text}`);
+      if (channelInfo) knowledgeParts.push(`THIS CHANNEL'S INFO / RULES:\n${channelInfo}`);
+      if (context) knowledgeParts.push(`CATEGORY GUIDE:\n${context}`);
+      const knowledge = knowledgeParts.join('\n\n');
+
+      const messageForAi = knowledge
+        ? `You are replying inside a specific Discord channel/category. Below is the INFO and ` +
+          `RULES for it — follow the rules and answer using this information. If the user asks ` +
+          `about events, scrims, tournaments, schedules, or rules that this info does NOT cover, ` +
+          `say you don't have that info here — do NOT make up details. Reply in the user's language.\n\n` +
+          `${knowledge}\n\n=== USER MESSAGE ===\n${userText}`
         : userText;
 
       const payload = {
