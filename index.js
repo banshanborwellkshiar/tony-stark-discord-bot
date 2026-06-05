@@ -189,20 +189,16 @@ const INFO_NAME_RE = /\b(?:info|information|rules|about|guide|details)\b/i;
 const infoCache = new Map(); // channelId -> { text, name, ts }
 
 async function getInfoChannelText(message) {
-  if (!message.guild) return null;
-  const candidates = message.guild.channels.cache.filter(
+  // Strict: only read an info channel that is in the SAME category as the
+  // current channel. No category, or no info channel in it -> no grounding.
+  if (!message.guild || !message.channel?.parentId) return null;
+  const infoCh = message.guild.channels.cache.find(
     (c) =>
       typeof c.isTextBased === 'function' &&
       c.isTextBased() &&
+      c.parentId === message.channel.parentId &&
       INFO_NAME_RE.test(c.name)
   );
-  if (candidates.size === 0) return null;
-
-  // Prefer an info channel in the same category as the current channel.
-  const sameCat =
-    message.channel?.parentId &&
-    candidates.find((c) => c.parentId === message.channel.parentId);
-  const infoCh = sameCat || candidates.first();
   if (!infoCh) return null;
 
   const cached = infoCache.get(infoCh.id);
