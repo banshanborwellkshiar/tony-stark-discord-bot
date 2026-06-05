@@ -123,6 +123,14 @@ async function handleTournamentCommand(message, text) {
       case 'players':
       case 'player':
         return await listPlayers(message, name);
+      case 'result':
+      case 'win':
+      case 'won':
+        return await resultMatch(message, name);
+      case 'bracket':
+      case 'standings':
+      case 'round':
+        return await showBracket(message, name);
       case 'cancel':
       case 'delete':
         return await cancelTournament(message, name);
@@ -214,32 +222,115 @@ async function startTournament(message, name) {
     );
   }
 
-  const shuffled = shuffle(players);
-  const matches = [];
-  for (let i = 0; i < shuffled.length; i += 2) {
-    matches.push([shuffled[i], shuffled[i + 1] || null]);
-  }
-
-  const lines = matches.map((m, i) =>
-    m[1]
-      ? `**Match ${i + 1}:** ${m[0]} 🆚 ${m[1]}`
-      : `**Match ${i + 1}:** ${m[0]} 🎟️ *(bye — auto-advances)*`
-  );
-
-  const embed = new EmbedBuilder()
-    .setTitle(`🥊 ${tournament.name} — Round 1`)
-    .setDescription(lines.join('\n'))
-    .setFooter({ text: `${players.length} players • good luck!` })
-    .setColor(0xf1c40f)
-    .setTimestamp();
-
+  const shuffledIds = shuffle(players).map((p) => p.id);
+  tournament.round = 1;
+  tournament.matches = makeMatches(shuffledIds);
   tournament.status = 'started';
   save();
 
-  await message.channel.send({
-    content: '🏁 **Sign-ups are closed — here is the bracket!**',
-    embeds: [embed],
+  await message.channel.send('🏁 **Sign-ups are closed — here is the bracket!**');
+  await postRound(message.channel, tournament);
+}
+
+// ---------------------------------------------------------------------------
+// Bracket & scoring
+// ---------------------------------------------------------------------------
+
+/** Pairs an ordered list of player IDs into matches; an odd one out gets a bye. */
+function makeMatches(playerIds) {
+  const matches = [];
+  for (let i = 0; i < playerIds.length; i += 2) {
+    const a = playerIds[i];
+    const b = playerIds[i + 1] || null;
+    matches.push({ a, b, winner: b ? null : a }); // bye auto-advances
+  }
+  return matches;
+}
+
+/** Posts the current round's bracket (winners marked with ✅). */
+async function postRound(channel, t) {
+  const lines = t.matches.map((m, i) => {
+    if (!m.b) return `**Match ${i + 1}:** <@${m.a}> 🎟️ *(bye — advances)*`;
+    const a = m.winner === m.a ? `__<@${m.a}>__ ✅` : `<@${m.a}>`;
+    const b = m.winner === m.b ? `__<@${m.b}>__ ✅` : `<@${m.b}>`;
+    return `**Match ${i + 1}:** ${a} 🆚 ${b}`;
   });
+  const embed = new EmbedBuilder()
+    .setTitle(`🥊 ${t.name} — Round ${t.round}`)
+    .setDescription(lines.join('\n'))
+    .setFooter({ text: `Report a winner: tournament result ${t.name} @winner` })
+    .setColor(0xf1c40f)
+    .setTimestamp();
+  await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
+}
+
+async function resultMatch(message, rawName) {
+  if (!isAdmin(message.member)) {
+    return message.reply('🔒 Only admins/mods can report results.');
+  }
+  const winner = message.mentions.users
+    ?.filter((u) => u.id !== message.client.user.id)
+    .first();
+  if (!winner) {
+    return message.reply('Usage: `@TonyStark tournament result <name> @winner`');
+  }
+  const name = rawName.replace(/<@!?\d+>/g, '').trim();
+  if (!name) {
+    return message.reply('Which tournament? `tournament result <name> @winner`');
+  }
+
+  const bucket = guildBucket(message.guild.id);
+  const t = bucket[name.toLowerCase()];
+  if (!t) return message.reply(`No tournament named **${name}**.`);
+  if (t.status !== 'started' || !t.matches) {
+    return message.reply(`**${t.name}** isn't in progress. Start it first.`);
+  }
+
+  const match = t.matches.find(
+    (m) => (m.a === winner.id || m.b === winner.id) && !m.winner
+  );
+  if (!match) {
+    return message.reply(`${winner} isn't in an unfinished match this round.`);
+  }
+
+  match.winner = winner.id;
+  save();
+  await message.reply(`✅ ${winner} advances!`);
+
+  if (t.matches.every((m) => m.winner)) {
+    await advanceRound(message.channel, t);
+  }
+}
+
+async function advanceRound(channel, t) {
+  const winners = t.matches.map((m) => m.winner);
+  if (winners.length === 1) {
+    t.status = 'finished';
+    save();
+    const embed = new EmbedBuilder()
+      .setTitle(`🏆 ${t.name} — Champion!`)
+      .setDescription(`👑 <@${winners[0]}> wins it all! 🎉`)
+      .setColor(0xffd700)
+      .setTimestamp();
+    await channel.send({ content: '🏁 **Tournament complete!**', embeds: [embed] });
+    return;
+  }
+  t.round += 1;
+  t.matches = makeMatches(winners);
+  save();
+  await channel.send(`➡️ On to **Round ${t.round}**!`);
+  await postRound(channel, t);
+  // A fresh round could already be settled if it's all byes.
+  if (t.matches.every((m) => m.winner)) await advanceRound(channel, t);
+}
+
+async function showBracket(message, name) {
+  if (!name) return message.reply('Usage: `@TonyStark tournament bracket <name>`');
+  const bucket = guildBucket(message.guild.id);
+  const t = bucket[name.toLowerCase()];
+  if (!t) return message.reply(`No tournament named **${name}**.`);
+  if (!t.matches) return message.reply(`**${t.name}** hasn't started yet.`);
+  await postRound(message.channel, t);
 }
 
 async function listPlayers(message, name) {
@@ -313,9 +404,12 @@ async function showHelp(message) {
         '`@TonyStark tournament list` — show all tournaments',
         '`@TonyStark tournament players <name>` — who has joined',
         '`@TonyStark tournament start <name>` — lock entries & make the bracket *(admin)*',
+        '`@TonyStark tournament result <name> @winner` — report a match winner *(admin)*',
+        '`@TonyStark tournament bracket <name>` — show the current bracket',
         '`@TonyStark tournament cancel <name>` — delete a tournament *(admin)*',
         '',
         `🙋 Players join by reacting ${JOIN_EMOJI} on the tournament announcement.`,
+        '🏆 Winners auto-advance round by round until a champion is crowned.',
       ].join('\n')
     )
     .setColor(0x95a5a6);
